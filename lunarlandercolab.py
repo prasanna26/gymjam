@@ -14,10 +14,14 @@ from time import time
 from gym.wrappers import Monitor
 from collections import deque
 
+# edit this to customize the output directory, remember to add trailing slash.
+RESULTS_OUTPUT_DIR = ""
 
 # A generic game evaluator.
 # Make specific evaluators if feature info is
 # required to be recorded and stored.
+
+
 class GameEvaluator:
     def __init__(self, game_name, seed=1009, num_rep=1):
         self.env = gym.make(game_name)
@@ -35,13 +39,13 @@ class GameEvaluator:
         observation = env.reset()
 
         action_frequency = [0] * self.num_actions
-        
+
         action_count = 0
         done = False
         while not done:
-            #if render:
+            # if render:
             #    env.render()
-            
+
             pos = min(action_count//self.num_rep, len(agent.commands)-1)
             action = agent.commands[pos]
             action_count += 1
@@ -50,14 +54,15 @@ class GameEvaluator:
             agent.fitness += reward
 
             action_frequency[action] += 1
-        
+
         final_observation = list(observation)
 
         agent.features = tuple(final_observation[:1])
         agent.action_count = action_count
-        
+
+
 class Agent:
-    
+
     def __init__(self, game, sequence_len):
         self.fitness = 0
         self.game = game
@@ -74,6 +79,7 @@ class Agent:
             (child.commands[i] + offset) % self.game.num_actions
         return child
 
+
 class LinearSizer:
     def __init__(self, start_size, end_size):
         self.min_size = start_size
@@ -82,6 +88,7 @@ class LinearSizer:
     def get_size(self, portion_done):
         size = int((portion_done+1e-9)*self.range) + self.min_size
         return min(size, self.min_size+self.range)
+
 
 class ExponentialSizer:
     def __init__(self, start_size, end_size):
@@ -108,6 +115,7 @@ class EmptyBuffer:
     def remove_individual(self):
         return None
 
+
 class SlidingBuffer:
 
     def __init__(self, buffer_size):
@@ -122,7 +130,8 @@ class SlidingBuffer:
 
     def remove_individual(self):
         return self.buffer_queue.popleft()
-      
+
+
 def runRS(runnum, game, sequence_len, num_individuals):
     best_fitness = -10 ** 18
     best_sequence = None
@@ -139,16 +148,15 @@ def runRS(runnum, game, sequence_len, num_individuals):
         if agent_id % 100 == 0:
             print(agent_id, best_fitness)
 
-    with open('results' + str(runnum) + '.txt', 'a') as f:
+    with open(RESULTS_OUTPUT_DIR + 'results' + str(runnum) + '.txt', 'a') as f:
         f.write(str(whenfound) + " " + str(best_fitness) + "\n")
 
-    return best_fitness, best_sequence      
-      
-      
-           
-def runES(runnum, game, sequence_len, is_plus=False, 
-        num_parents=None, population_size=None, 
-        num_generations=None):
+    return best_fitness, best_sequence
+
+
+def runES(runnum, game, sequence_len, is_plus=False,
+          num_parents=None, population_size=None,
+          num_generations=None):
 
     best_fitness = -10 ** 18
     best_sequence = None
@@ -160,7 +168,7 @@ def runES(runnum, game, sequence_len, is_plus=False,
         if p.fitness > best_fitness:
             best_fitness = p.fitness
             best_sequence = p.commands
-    
+
     print(best_fitness)
 
     for curGen in range(num_generations):
@@ -179,32 +187,35 @@ def runES(runnum, game, sequence_len, is_plus=False,
                 whenfound = curGen*population_size + i
                 game.run(child, render=False)
             population.append(child)
-        
+
         print(curGen, parents[0].fitness, best_fitness)
 
         if is_plus:
             population += parents
 
-    with open('results' + str(runnum) + '.txt', 'a') as f:
+    with open(RESULTS_OUTPUT_DIR + 'results' + str(runnum) + '.txt', 'a') as f:
         f.write(str(whenfound) + " " + str(best_fitness) + "\n")
 
     return best_fitness, best_sequence
-  
+
+# This is the feature map
+
+
 class FixedFeatureMap:
-    
+
     def __init__(self, num_to_evaluate, buffer_size, boundaries, sizer):
 
         # Clock for resizing the map.
         self.num_individuals_to_evaluate = num_to_evaluate
         self.num_individuals_added = 0
-        
+
         # Feature to individual mapping.
         self.num_features = len(boundaries)
         self.boundaries = boundaries
         self.elite_map = {}
         self.elite_indices = []
 
-        # A group is the number of cells along 
+        # A group is the number of cells along
         # each dimension in the feature space.
         self.group_sizer = sizer
         self.num_groups = 3
@@ -227,13 +238,13 @@ class FixedFeatureMap:
         return index
 
     def get_index(self, agent):
-        index = tuple(self.get_feature_index(i, v) \
-                for i, v in enumerate(agent.features))
+        index = tuple(self.get_feature_index(i, v)
+                      for i, v in enumerate(agent.features))
         return index
 
     def add_to_map(self, to_add):
         index = self.get_index(to_add)
-
+        # NOTE: when replaced replaced_elite is True...
         replaced_elite = False
         if index not in self.elite_map:
             self.elite_indices.append(index)
@@ -242,7 +253,8 @@ class FixedFeatureMap:
         elif self.elite_map[index].fitness < to_add.fitness:
             self.elite_map[index] = to_add
             replaced_elite = True
-
+        # if replaced_elite == True:
+        # save mutation
         return replaced_elite
 
     def remove_from_map(self, to_remove):
@@ -263,7 +275,8 @@ class FixedFeatureMap:
         self.elite_map = {}
         for elite in all_elites:
             self.add_to_map(elite)
-        
+
+    # Possible places to add "checkpoint hook"
     def add(self, to_add):
         self.num_individuals_added += 1
         portion_done = \
@@ -285,7 +298,7 @@ class FixedFeatureMap:
         return self.elite_map[index]
 
 # For testing to make sure that the map works
-#if __name__ == '__main__':
+# if __name__ == '__main__':
 #    linear_sizer = LinearSizer(2, 10)
 #    linear_sizer = ExponentialSizer(2, 500)
 #    feature_map = FixedFeatureMap(100, None, [(0, 10), (0, 10)], linear_sizer)
@@ -295,17 +308,17 @@ class FixedFeatureMap:
     #feature_map = FixedFeatureMap(500, 10, [(0, 10), (0, 10)], linear_sizer)
     #game = GameEvaluator('LunarLander-v2')
 
-    #for x in range(0, 100):
+    # for x in range(0, 100):
     #    agent = Agent(game, 200)
     #    agent.features = (x%10, (x+5)%10)
     #    agent.fitness = -x
         #print(x, feature_map.add(agent))
     #    feature_map.add(agent)
 
-  
-def runME(runnum, game, sequence_len, 
-        init_pop_size=-1, num_individuals=-1, sizer_type='Linear',
-        sizer_range=(10,10), buffer_size=None):
+
+def runME(runnum, game, sequence_len,
+          init_pop_size=-1, num_individuals=-1, sizer_type='Linear',
+          sizer_range=(10, 10), buffer_size=None):
 
     best_fitness = -10 ** 18
     best_sequence = None
@@ -321,6 +334,7 @@ def runME(runnum, game, sequence_len,
     feature_ranges = [(-1.0, 1.0), (0.0, 1.0)]
     feature_ranges = feature_ranges[:2]
     print(feature_ranges)
+    # 0. This is where the map is initialized
     feature_map = FixedFeatureMap(num_individuals, buffer_size,
                                   feature_ranges, sizer)
 
@@ -333,8 +347,9 @@ def runME(runnum, game, sequence_len,
             cur_agent = feature_map.get_random_elite().mutate()
 
         game.run(cur_agent)
+        # Keep track of changes here...
         feature_map.add(cur_agent)
-        
+
         if cur_agent.fitness > best_fitness:
             print('improved:', cur_agent.fitness, cur_agent.action_count)
             best_fitness = cur_agent.fitness
@@ -346,15 +361,14 @@ def runME(runnum, game, sequence_len,
             #elites = [feature_map.elite_map[index] for index in feature_map.elite_map]
             #indicies = [index for index in feature_map.elite_map]
             #features = list(zip(*[a.features for a in elites]))
-            #for f in features:
+            # for f in features:
             #    print(sorted(f))
-            #print(indicies)
-            
+            # print(indicies)
 
             print(individuals_evaluated, best_fitness,
                   len(feature_map.elite_indices))
 
-    with open('results' + str(runnum) + '.txt', 'a') as f:
+    with open(RESULTS_OUTPUT_DIR + 'results' + str(runnum) + '.txt', 'a') as f:
         f.write(str(whenfound) + " " + str(best_fitness) + "\n")
 
     return best_fitness, best_sequence
@@ -371,23 +385,23 @@ def main(args=None):
     game = GameEvaluator('LunarLander-v2', seed=1009, num_rep=3)
 
     if search_type == 'ES':
-        runES(run, game, 
-                num_actions, 
-                is_plus=True,
-                num_parents=10, 
-                population_size=100,
-                num_generations=1000,
-            )
+        runES(run, game,
+              num_actions,
+              is_plus=True,
+              num_parents=10,
+              population_size=100,
+              num_generations=1000,
+              )
     elif search_type == 'RS':
         runRS(run, game, num_actions, 100000)
     elif search_type == 'ME':
-        runME(run, game, 
-                num_actions, 
-                init_pop_size=1000, 
-                num_individuals=1000000, 
-                sizer_type='Linear', 
-                sizer_range=(7000, 8000), 
-                buffer_size=None)
+        runME(run, game,
+              num_actions,
+              init_pop_size=1000,
+              num_individuals=1000000,
+              sizer_type='Linear',
+              sizer_range=(7000, 8000),
+              buffer_size=None)
     elif search_type == 'test':
         from gymjam.search import Agent
         cur_agent = Agent(game, num_actions)
@@ -395,6 +409,7 @@ def main(args=None):
             game.run(cur_agent, render=False)
 
     game.env.close()
+
 
 if __name__ == '__main__':
     sys.exit(main())
