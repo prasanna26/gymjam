@@ -1,2 +1,5 @@
 lib/
 results/
+*.log
+*.err
+results*.txt
