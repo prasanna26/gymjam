@@ -13,9 +13,19 @@ import gym
 from time import time
 from gym.wrappers import Monitor
 from collections import deque
+import pickle
+import os
+import time
+import glob
 
 # edit this to customize the output directory, remember to add trailing slash.
 RESULTS_OUTPUT_DIR = ""
+# use this to control whether checkpointing is activated or not
+CHECKPOINT_ENABLED = False
+CHECKPOINTS_DIR = "checkpoints"
+CHECKPOINT_FILE_NAME = "current_checkpoint"
+CHECKPOINT_EXTENSION = "pkl"
+CHECKPOINT_FREQUENCY = 100  # how many updates before saving a checkpoint
 
 # A generic game evaluator.
 # Make specific evaluators if feature info is
@@ -318,7 +328,7 @@ class FixedFeatureMap:
 
 def runME(runnum, game, sequence_len,
           init_pop_size=-1, num_individuals=-1, sizer_type='Linear',
-          sizer_range=(10, 10), buffer_size=None):
+          sizer_range=(10, 10), buffer_size=None, checkpoint_data=None, checkpoint_enabled=CHECKPOINT_ENABLED):
 
     best_fitness = -10 ** 18
     best_sequence = None
@@ -335,8 +345,15 @@ def runME(runnum, game, sequence_len,
     feature_ranges = feature_ranges[:2]
     print(feature_ranges)
     # 0. This is where the map is initialized
-    feature_map = FixedFeatureMap(num_individuals, buffer_size,
-                                  feature_ranges, sizer)
+    if checkpoint_enabled and checkpoint_data:
+        print("Using checkpoint data!")
+        feature_map = checkpoint_data
+    else:
+        feature_map = FixedFeatureMap(num_individuals, buffer_size,
+                                      feature_ranges, sizer)
+
+    session_checkpoint_time = int(time.time())
+    num_checkpoints = 0
 
     for individuals_evaluated in range(num_individuals):
 
@@ -348,7 +365,27 @@ def runME(runnum, game, sequence_len,
 
         game.run(cur_agent)
         # Keep track of changes here...
-        feature_map.add(cur_agent)
+        did_add = feature_map.add(cur_agent)
+
+        # On each add (i.e. data change) update the checkpoint file.
+        if did_add and checkpoint_enabled:
+            # Update the main checkpoint file.
+            checkpoint_file = os.path.join(CHECKPOINTS_DIR, CHECKPOINT_FILE_NAME +
+                                           "_{}_latest.{}".format(session_checkpoint_time, CHECKPOINT_EXTENSION))
+            with open(checkpoint_file, "wb") as f:
+                pickle.dump(feature_map, f)
+            num_checkpoints += 1
+            # print("current_time: ", last_checkpoint_time)
+            # If it's been enough time since the last incremental checkpoint, create one
+            if num_checkpoints % CHECKPOINT_FREQUENCY == 0:
+                # save a secondary checkpoint
+                checkpoint_file = os.path.join(CHECKPOINTS_DIR,
+                                               CHECKPOINT_FILE_NAME + "_{}_{}.{}".format(session_checkpoint_time,
+                                                                                         int(
+                                                                                             num_checkpoints / CHECKPOINT_FREQUENCY),
+                                                                                         CHECKPOINT_EXTENSION))
+                with open(checkpoint_file, "wb") as f:
+                    pickle.dump(feature_map, f)
 
         if cur_agent.fitness > best_fitness:
             print('improved:', cur_agent.fitness, cur_agent.action_count)
@@ -380,9 +417,24 @@ def main(args=None):
     run = 0
 
     num_actions = 100
-    search_type = 'RS'
+    num_individuals = 100000
+    # num_individuals = 100
+    search_type = 'ME'
     #game = GameEvaluator('Qbert-v0', seed=1009, num_rep=2)
     game = GameEvaluator('LunarLander-v2', seed=1009, num_rep=3)
+    checkpoint_data = None
+    if CHECKPOINT_ENABLED:
+        # Look for checkpoint:
+        checkpoint_files_glob = CHECKPOINTS_DIR + \
+            "/*.{}".format(CHECKPOINT_EXTENSION)
+        checkpoints_found = glob.glob(checkpoint_files_glob)
+
+        # TODO: add file sorting / preference rules?
+        if checkpoints_found:
+            last_checkpoint = checkpoints_found.pop()
+            print("Found latest checkpoint data: ", last_checkpoint)
+            with open(last_checkpoint, "rb") as f:
+                checkpoint_data = pickle.load(f)
 
     if search_type == 'ES':
         runES(run, game,
@@ -393,15 +445,16 @@ def main(args=None):
               num_generations=1000,
               )
     elif search_type == 'RS':
-        runRS(run, game, num_actions, 100000)
+        runRS(run, game, num_actions, num_individuals)
     elif search_type == 'ME':
         runME(run, game,
               num_actions,
               init_pop_size=1000,
-              num_individuals=1000000,
+              num_individuals=num_individuals,
               sizer_type='Linear',
               sizer_range=(7000, 8000),
-              buffer_size=None)
+              buffer_size=None,
+              checkpoint_data=checkpoint_data)
     elif search_type == 'test':
         from gymjam.search import Agent
         cur_agent = Agent(game, num_actions)
