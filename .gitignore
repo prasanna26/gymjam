@@ -2,6 +2,8 @@ lib/
 results/
 *.log
 *.err
+*.out
 results*.txt
 checkpoints/
 .idea/
+__pycache__/

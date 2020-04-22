@@ -16,16 +16,25 @@ from collections import deque
 import pickle
 import os
 import time
-import glob
+import argparse
+from checkpointing import Checkpoint
 
 # edit this to customize the output directory, remember to add trailing slash.
 RESULTS_OUTPUT_DIR = ""
 # use this to control whether checkpointing is activated or not
 CHECKPOINT_ENABLED = False
+CHECKPOINT_PREFIX = "untitled"
+CHECKPOINT_RESUME = False
 CHECKPOINTS_DIR = "checkpoints"
-CHECKPOINT_FILE_NAME = "current_checkpoint"
-CHECKPOINT_EXTENSION = "pkl"
-CHECKPOINT_FREQUENCY = 100  # how many updates before saving a checkpoint
+CHECKPOINT_FREQUENCY = 100
+
+ME_ENDPOINT_BC = 'ME-endpointBC'
+ME_POLYHASH_BC = 'ME-polyhashBC'
+ME_FITNESS_BC = 'ME-fitnessBC'
+ME_ENTROPY_BC = 'ME-entropyBC'
+MODES = [ME_ENDPOINT_BC, ME_POLYHASH_BC, ME_FITNESS_BC, ME_ENTROPY_BC]
+
+DEFAULT_SEED = 1009
 
 # A generic game evaluator.
 # Make specific evaluators if feature info is
@@ -33,11 +42,12 @@ CHECKPOINT_FREQUENCY = 100  # how many updates before saving a checkpoint
 
 
 class GameEvaluator:
-    def __init__(self, game_name, seed=1009, num_rep=1):
+    def __init__(self, game_name, seed=1009, num_rep=1, mode=None):
         self.env = gym.make(game_name)
         self.seed = seed
         self.num_rep = num_rep
         self.num_actions = self.env.action_space.n
+        self.mode = mode
         print(self.num_actions)
 
     def run(self, agent, render=False):
@@ -67,7 +77,35 @@ class GameEvaluator:
 
         final_observation = list(observation)
 
-        agent.features = tuple(final_observation[:1])
+        # For experiment 2D MAP-Elites polyhashBC
+        if self.mode == ME_POLYHASH_BC:
+            # calculate polynomial hash
+            b1 = 3
+            b2 = 7
+
+            runningHash1 = 0
+            runningHash2 = 0
+            for cmd in agent.commands:
+                runningHash1 = (runningHash1 * b1 + cmd) % len(agent.commands)
+                runningHash2 = (runningHash2 * b2 + cmd) % len(agent.commands)
+            agent.features = (runningHash1, runningHash2)
+        # For experiment fitnessBC
+        elif self.mode == ME_FITNESS_BC:
+            agent.features = (agent.fitness, agent.fitness)
+        # For experiment entropyBC
+        elif self.mode == ME_ENTROPY_BC:
+            # calculate RLE approximation
+            numNewChars = 0
+            prevChar = -2
+            for cmd in agent.commands:
+                if cmd != prevChar:
+                    numNewChars = numNewChars + 1
+                    prevChar = cmd
+            agent.features = (numNewChars, numNewChars)
+        # For experiment endpointBC and others
+        else:
+            agent.features = tuple(final_observation[:1])
+
         agent.action_count = action_count
 
 
@@ -142,7 +180,7 @@ class SlidingBuffer:
         return self.buffer_queue.popleft()
 
 
-def runRS(runnum, game, sequence_len, num_individuals):
+def runRS(runnum, game, sequence_len, num_individuals, checkpoint=None):
     best_fitness = -10 ** 18
     best_sequence = None
     whenfound = 0
@@ -150,11 +188,18 @@ def runRS(runnum, game, sequence_len, num_individuals):
     for agent_id in range(num_individuals):
         agent = Agent(game, sequence_len)
         game.run(agent)
+
         if agent.fitness > best_fitness:
             best_fitness = agent.fitness
             best_sequence = agent.commands
             whenfound = agent_id
+
+            # Save agent
+            if checkpoint and checkpoint.checkpoint_enabled:
+                checkpoint.save(agent)
+
             game.run(agent, render=False)
+
         if agent_id % 100 == 0:
             print(agent_id, best_fitness)
 
@@ -166,7 +211,7 @@ def runRS(runnum, game, sequence_len, num_individuals):
 
 def runES(runnum, game, sequence_len, is_plus=False,
           num_parents=None, population_size=None,
-          num_generations=None):
+          num_generations=None, checkpoint=None):
 
     best_fitness = -10 ** 18
     best_sequence = None
@@ -178,6 +223,9 @@ def runES(runnum, game, sequence_len, is_plus=False,
         if p.fitness > best_fitness:
             best_fitness = p.fitness
             best_sequence = p.commands
+
+            if checkpoint and checkpoint.checkpoint_enabled:
+                checkpoint.save(p)
 
     print(best_fitness)
 
@@ -196,12 +244,17 @@ def runES(runnum, game, sequence_len, is_plus=False,
                 best_sequence = child.commands
                 whenfound = curGen*population_size + i
                 game.run(child, render=False)
+
+                if checkpoint and checkpoint.checkpoint_enabled:
+                    checkpoint.save(child)
+
             population.append(child)
 
         print(curGen, parents[0].fitness, best_fitness)
 
         if is_plus:
             population += parents
+
 
     with open(RESULTS_OUTPUT_DIR + 'results' + str(runnum) + '.txt', 'a') as f:
         f.write(str(whenfound) + " " + str(best_fitness) + "\n")
@@ -328,7 +381,7 @@ class FixedFeatureMap:
 
 def runME(runnum, game, sequence_len,
           init_pop_size=-1, num_individuals=-1, sizer_type='Linear',
-          sizer_range=(10, 10), buffer_size=None, checkpoint_data=None, checkpoint_enabled=CHECKPOINT_ENABLED):
+          sizer_range=(10, 10), buffer_size=None, checkpoint=None, mode=None):
 
     best_fitness = -10 ** 18
     best_sequence = None
@@ -340,14 +393,27 @@ def runME(runnum, game, sequence_len,
     elif sizer_type == 'Exponential':
         sizer = ExponentialSizer(*sizer_range)
 
-    #feature_ranges = [(0, sequence_len)] * 2
-    feature_ranges = [(-1.0, 1.0), (0.0, 1.0)]
+    # Experiment branches...
+    if mode == ME_POLYHASH_BC:
+        feature_ranges = [(0.0, sequence_len), (0.0, sequence_len)]
+    # For experiment fitnessBC
+    elif mode == ME_FITNESS_BC:
+        feature_ranges = [(-300.0, 300.0), (-300.0, 300.0)]
+    # For experiment entropyBC
+    elif mode == ME_ENTROPY_BC:
+        feature_ranges = [(0.0, sequence_len), (0.0, sequence_len)]
+    # For experiment endpointBC and others
+    else:
+        feature_ranges = [(-1.0, 1.0), (0.0, 1.0)]
+
+    # Yes, this array slice is invariant across all branches above.
     feature_ranges = feature_ranges[:2]
+
     print(feature_ranges)
     # 0. This is where the map is initialized
-    if checkpoint_enabled and checkpoint_data:
-        print("Using checkpoint data!")
-        feature_map = checkpoint_data
+    if checkpoint and checkpoint.checkpoint_resume and checkpoint.checkpoint_data:
+        print("Using preloaded checkpoint data...")
+        feature_map = checkpoint.checkpoint_data
     else:
         feature_map = FixedFeatureMap(num_individuals, buffer_size,
                                       feature_ranges, sizer)
@@ -368,24 +434,8 @@ def runME(runnum, game, sequence_len,
         did_add = feature_map.add(cur_agent)
 
         # On each add (i.e. data change) update the checkpoint file.
-        if did_add and checkpoint_enabled:
-            # Update the main checkpoint file.
-            checkpoint_file = os.path.join(CHECKPOINTS_DIR, CHECKPOINT_FILE_NAME +
-                                           "_{}_latest.{}".format(session_checkpoint_time, CHECKPOINT_EXTENSION))
-            with open(checkpoint_file, "wb") as f:
-                pickle.dump(feature_map, f)
-            num_checkpoints += 1
-            # print("current_time: ", last_checkpoint_time)
-            # If it's been enough time since the last incremental checkpoint, create one
-            if num_checkpoints % CHECKPOINT_FREQUENCY == 0:
-                # save a secondary checkpoint
-                checkpoint_file = os.path.join(CHECKPOINTS_DIR,
-                                               CHECKPOINT_FILE_NAME + "_{}_{}.{}".format(session_checkpoint_time,
-                                                                                         int(
-                                                                                             num_checkpoints / CHECKPOINT_FREQUENCY),
-                                                                                         CHECKPOINT_EXTENSION))
-                with open(checkpoint_file, "wb") as f:
-                    pickle.dump(feature_map, f)
+        if did_add and checkpoint and checkpoint.checkpoint_enabled:
+            checkpoint.save(feature_map)
 
         if cur_agent.fitness > best_fitness:
             print('improved:', cur_agent.fitness, cur_agent.action_count)
@@ -410,51 +460,68 @@ def runME(runnum, game, sequence_len,
 
     return best_fitness, best_sequence
 
-
 def main(args=None):
-    if args is None:
-        args = sys.argv[1:]
     run = 0
 
-    num_actions = 100
-    num_individuals = 100000
-    # num_individuals = 100
-    search_type = 'ME'
+    num_actions = args.num_actions if args.num_actions else 100
+    num_parents = args.num_parents if args.num_parents else 10
+    num_individuals = args.num_individuals if args.num_individuals else 100000
+    search_type = args.search_type if args.search_type else 'ME'
+    population_size = args.population_size if args.population_size else 100
+    init_population_size = args.init_population_size if args.init_population_size else 1000
+    num_generations = args.num_generations if args.num_generations else 1000
+    checkpoint_dir = args.checkpoint_dir if args.checkpoint_dir else CHECKPOINTS_DIR
+    checkpoint_enabled = args.checkpoint_enabled if args.checkpoint_enabled else CHECKPOINT_ENABLED
+    checkpoint_prefix = args.checkpoint_prefix if args.checkpoint_prefix else CHECKPOINT_PREFIX
+    checkpoint_resume = args.checkpoint_resume if args.checkpoint_resume else CHECKPOINT_RESUME
+    checkpoint_frequency = args.checkpoint_frequency if args.checkpoint_frequency else 1000
+    seed = args.seed if args.seed else DEFAULT_SEED
+    is_plus = args.is_plus # NOTE: this defaults to false
+    mode = args.mode
     #game = GameEvaluator('Qbert-v0', seed=1009, num_rep=2)
-    game = GameEvaluator('LunarLander-v2', seed=1009, num_rep=3)
+    game = GameEvaluator('LunarLander-v2', seed=seed, num_rep=3, mode=mode)
     checkpoint_data = None
-    if CHECKPOINT_ENABLED:
-        # Look for checkpoint:
-        checkpoint_files_glob = CHECKPOINTS_DIR + \
-            "/*.{}".format(CHECKPOINT_EXTENSION)
-        checkpoints_found = glob.glob(checkpoint_files_glob)
 
-        # TODO: add file sorting / preference rules?
-        if checkpoints_found:
-            last_checkpoint = checkpoints_found.pop()
-            print("Found latest checkpoint data: ", last_checkpoint)
-            with open(last_checkpoint, "rb") as f:
-                checkpoint_data = pickle.load(f)
+    checkpoint = None
+    if checkpoint_enabled:
+        checkpoint = Checkpoint(
+            checkpoint_resume=checkpoint_resume,
+            checkpoint_prefix=checkpoint_prefix,
+            checkpoint_frequency=checkpoint_frequency,
+            checkpoint_dir=checkpoint_dir,
+            checkpoint_enabled=checkpoint_enabled,
+            search_type=search_type
+        )
+
+        if checkpoint_resume:
+            # Look for checkpoint matching prefix
+            checkpoint.checkpoint_data = checkpoint.find_latest_checkpoint()
 
     if search_type == 'ES':
         runES(run, game,
               num_actions,
-              is_plus=True,
-              num_parents=10,
-              population_size=100,
-              num_generations=1000,
-              )
+              is_plus=is_plus,
+              num_parents=num_parents,
+              population_size=population_size,
+              num_generations=num_generations,
+              checkpoint=checkpoint)
     elif search_type == 'RS':
-        runRS(run, game, num_actions, num_individuals)
+        runRS(run, game, num_actions, num_individuals, checkpoint=checkpoint)
     elif search_type == 'ME':
+        # If using a special mode...
+        if mode in MODES:
+            sizer_range = (200, 200)
+        else:
+            sizer_range = (7000, 8000)
         runME(run, game,
               num_actions,
-              init_pop_size=1000,
+              init_pop_size=init_population_size,
               num_individuals=num_individuals,
               sizer_type='Linear',
-              sizer_range=(7000, 8000),
+              sizer_range=sizer_range,
               buffer_size=None,
-              checkpoint_data=checkpoint_data)
+              checkpoint=checkpoint,
+              mode=mode)
     elif search_type == 'test':
         from gymjam.search import Agent
         cur_agent = Agent(game, num_actions)
@@ -463,6 +530,27 @@ def main(args=None):
 
     game.env.close()
 
+# Define args
+parser = argparse.ArgumentParser(description='LunarLander runner')
+
+# Supported args
+parser.add_argument('--search-type', metavar='S', type=str,
+                    choices=['ES', 'RS', 'ME'])
+parser.add_argument('--is-plus', action='store_true', default=False)
+parser.add_argument('--num-actions', metavar='A', type=int)
+parser.add_argument('--num-parents', metavar='P', type=int)
+parser.add_argument('--num-generations', metavar='G', type=int)
+parser.add_argument('--num-individuals', metavar='I', type=int)
+parser.add_argument('--population-size', metavar='P', type=int)
+parser.add_argument('--init-population-size', metavar='IP', type=int)
+parser.add_argument('--checkpoint-dir', metavar='C', type=str, default='')
+parser.add_argument('--checkpoint-prefix', metavar='CP', type=str, default='')
+parser.add_argument('--checkpoint-frequency', metavar='F', type=int, default=CHECKPOINT_FREQUENCY)
+parser.add_argument('--checkpoint-enabled', default=CHECKPOINT_ENABLED, action='store_true')
+parser.add_argument('--checkpoint-resume', default=CHECKPOINT_RESUME, action='store_true')
+parser.add_argument('--seed', metavar='S', type=int, default=DEFAULT_SEED)
+parser.add_argument('--mode', metavar='M', type=str)
 
 if __name__ == '__main__':
-    sys.exit(main())
+    args = parser.parse_args()
+    sys.exit(main(args))

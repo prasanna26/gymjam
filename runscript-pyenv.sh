@@ -11,6 +11,9 @@
 /bin/hostname
 /bin/pwd
 
+
+# module load python3/intel/3.6.3
+eval "$(pyenv init -)"
 pyenv activate lunarlander
 
 for n in {1..20}; do python3 lunarlandercolab.py n; done
