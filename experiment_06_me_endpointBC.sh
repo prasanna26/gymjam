@@ -23,6 +23,7 @@ CHECKPOINT_FREQ=1000
 for n in {1..20}
 do
     python lunarlandercolab.py \
+           --run-id=e06_$n \
            --search-type=ME \
            --mode='ME-endpointBC' \
            --init-population-size=1000 \

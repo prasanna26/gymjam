@@ -180,7 +180,7 @@ class SlidingBuffer:
         return self.buffer_queue.popleft()
 
 
-def runRS(runnum, game, sequence_len, num_individuals, checkpoint=None):
+def runRS(run_id, game, sequence_len, num_individuals, checkpoint=None):
     best_fitness = -10 ** 18
     best_sequence = None
     whenfound = 0
@@ -203,13 +203,13 @@ def runRS(runnum, game, sequence_len, num_individuals, checkpoint=None):
         if agent_id % 100 == 0:
             print(agent_id, best_fitness)
 
-    with open(RESULTS_OUTPUT_DIR + 'results' + str(runnum) + '.txt', 'a') as f:
+    with open('{}results_{}.txt'.format(RESULTS_OUTPUT_DIR, run_id), 'a') as f:
         f.write(str(whenfound) + " " + str(best_fitness) + "\n")
 
     return best_fitness, best_sequence
 
 
-def runES(runnum, game, sequence_len, is_plus=False,
+def runES(run_id, game, sequence_len, is_plus=False,
           num_parents=None, population_size=None,
           num_generations=None, checkpoint=None):
 
@@ -255,8 +255,7 @@ def runES(runnum, game, sequence_len, is_plus=False,
         if is_plus:
             population += parents
 
-
-    with open(RESULTS_OUTPUT_DIR + 'results' + str(runnum) + '.txt', 'a') as f:
+    with open('{}results_{}.txt'.format(RESULTS_OUTPUT_DIR, run_id), 'a') as f:
         f.write(str(whenfound) + " " + str(best_fitness) + "\n")
 
     return best_fitness, best_sequence
@@ -292,10 +291,10 @@ class FixedFeatureMap:
         low_bound, high_bound = self.boundaries[feature_id]
         if feature <= low_bound:
             return 0
-        if high_bound <= feature:
+        if high_bound <= feature+1e-9:
             return self.num_groups-1
 
-        gap = high_bound - low_bound + 1
+        gap = high_bound - low_bound
         pos = feature - low_bound
         index = int(self.num_groups * pos / gap)
         return index
@@ -379,7 +378,7 @@ class FixedFeatureMap:
     #    feature_map.add(agent)
 
 
-def runME(runnum, game, sequence_len,
+def runME(run_id, game, sequence_len,
           init_pop_size=-1, num_individuals=-1, sizer_type='Linear',
           sizer_range=(10, 10), buffer_size=None, checkpoint=None, mode=None):
 
@@ -455,14 +454,12 @@ def runME(runnum, game, sequence_len,
             print(individuals_evaluated, best_fitness,
                   len(feature_map.elite_indices))
 
-    with open(RESULTS_OUTPUT_DIR + 'results' + str(runnum) + '.txt', 'a') as f:
+    with open('{}results_{}.txt'.format(RESULTS_OUTPUT_DIR, run_id), 'a') as f:
         f.write(str(whenfound) + " " + str(best_fitness) + "\n")
 
     return best_fitness, best_sequence
 
 def main(args=None):
-    run = 0
-
     num_actions = args.num_actions if args.num_actions else 100
     num_parents = args.num_parents if args.num_parents else 10
     num_individuals = args.num_individuals if args.num_individuals else 100000
@@ -480,6 +477,7 @@ def main(args=None):
     mode = args.mode
     #game = GameEvaluator('Qbert-v0', seed=1009, num_rep=2)
     game = GameEvaluator('LunarLander-v2', seed=seed, num_rep=3, mode=mode)
+    run_id = args.run_id if args.run_id else 'untitled_run'
     checkpoint_data = None
 
     checkpoint = None
@@ -498,7 +496,7 @@ def main(args=None):
             checkpoint.checkpoint_data = checkpoint.find_latest_checkpoint()
 
     if search_type == 'ES':
-        runES(run, game,
+        runES(run_id, game,
               num_actions,
               is_plus=is_plus,
               num_parents=num_parents,
@@ -506,14 +504,14 @@ def main(args=None):
               num_generations=num_generations,
               checkpoint=checkpoint)
     elif search_type == 'RS':
-        runRS(run, game, num_actions, num_individuals, checkpoint=checkpoint)
+        runRS(run_id, game, num_actions, num_individuals, checkpoint=checkpoint)
     elif search_type == 'ME':
         # If using a special mode...
         if mode in MODES:
             sizer_range = (200, 200)
         else:
-            sizer_range = (7000, 8000)
-        runME(run, game,
+            sizer_range = (2, 200)
+        runME(run_id, game,
               num_actions,
               init_pop_size=init_population_size,
               num_individuals=num_individuals,
@@ -521,7 +519,8 @@ def main(args=None):
               sizer_range=sizer_range,
               buffer_size=None,
               checkpoint=checkpoint,
-              mode=mode)
+              mode=mode
+              )
     elif search_type == 'test':
         from gymjam.search import Agent
         cur_agent = Agent(game, num_actions)
@@ -548,6 +547,7 @@ parser.add_argument('--checkpoint-prefix', metavar='CP', type=str, default='')
 parser.add_argument('--checkpoint-frequency', metavar='F', type=int, default=CHECKPOINT_FREQUENCY)
 parser.add_argument('--checkpoint-enabled', default=CHECKPOINT_ENABLED, action='store_true')
 parser.add_argument('--checkpoint-resume', default=CHECKPOINT_RESUME, action='store_true')
+parser.add_argument('--run-id', default='', type=str)
 parser.add_argument('--seed', metavar='S', type=int, default=DEFAULT_SEED)
 parser.add_argument('--mode', metavar='M', type=str)
 

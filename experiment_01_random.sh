@@ -23,6 +23,7 @@ CHECKPOINT_FREQ=1000
 for n in {1..20}
 do
     python lunarlandercolab.py \
+           --run-id=e01_$n \
            --search-type=RS \
            --num-individuals=100000 \
            --checkpoint-dir=$OUTDIR \

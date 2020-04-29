@@ -23,6 +23,7 @@ CHECKPOINT_FREQ=100
 for n in {1..20}
 do
     python lunarlandercolab.py \
+           --run-id=e09_$n \
            --search-type=ME \
            --mode='ME-entropyBC' \
            --init-population-size=1000 \

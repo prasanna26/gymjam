@@ -23,6 +23,7 @@ CHECKPOINT_FREQ=1000
 for n in {1..20}
 do
     python lunarlandercolab.py \
+           --run-id=e03_$n \
            --search-type=ES \
            --num-generations=1000000 \
            --num-parents=1 \

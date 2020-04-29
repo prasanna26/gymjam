@@ -23,6 +23,7 @@ CHECKPOINT_FREQ=100
 for n in {1..20}
 do
     python lunarlandercolab.py \
+           --run-id=e08_$n \
            --search-type=ME \
            --mode='ME-fitnessBC' \
            --init-population-size=1000 \
