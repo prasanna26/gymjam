@@ -4,13 +4,14 @@ from lunarlandercolab import FixedFeatureMap, Agent, GameEvaluator, LinearSizer,
 from checkpointing import Checkpoint
 import csv
 import statistics
+import re
 
 # Use as a CLI when called directly
 parser = argparse.ArgumentParser(description='Process checkpoints')
 parser.add_argument('--files', metavar='F', type=str, nargs='+',
                     help='load checkpoints by name')
-parser.add_argument('--logs', metavar='L', type=str, nargs='+',
-                    help='load logs by filename')
+parser.add_argument('--result-files', metavar='R', type=str, nargs='+',
+                    help='load result files')
 parser.add_argument('--outFile', metavar='O', type=str,
                     help='outfile name')
 parser.add_argument('--aggregations', metavar='A', type=str,
@@ -67,50 +68,116 @@ if args.files:
     # for r in runs:
     #     print(r)
 
+results = []
+
+if args.result_files:
+    files = args.result_files
+    for f in files:
+        try:
+            fp = open(f)
+            line = fp.readline()
+            parts = re.split('\s+', line)
+
+            if len(parts) >= 2:
+                experiment_time = parts[0]
+                experiment_fitness = parts[1]
+                result = {
+                    'file_name': f,
+                    'experiment_time': experiment_time,
+                    'experiment_fitness': experiment_fitness
+                }
+                results.append(result)
+            else:
+                print("WARNING: file '{}' has no parsable output on line 1 '{}'".format(f, line))
+            # do stuff with fp
+        finally:
+            fp.close()
+
 # Write CSVs
-if runs and args.outFile:
+if args.outFile:
     f_name = args.outFile
     # Write stats per run
-    with open('{}.csv'.format(f_name), 'w', newline='\n') as csvfile:
-        fieldnames = run.keys()
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader() # Add a header
-        writer.writerows(runs)
+    if runs:
+        with open('{}.csv'.format(f_name), 'w', newline='\n') as csvfile:
+            fieldnames = runs[0].keys()
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader() # Add a header
+            writer.writerows(runs)
+
+    # Write stats per runs
+    if results:
+        with open('{}_time_results.csv'.format(f_name), 'w', newline='\n') as csvfile:
+            fieldnames = results[0].keys()
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader() # Add a header
+            writer.writerows(results)
 
     # Write aggregations
     if args.aggregations:
         aggs_file = args.aggregations
 
         # NOTE: these must match column order in aggs file
-        cols = ['file_name', 'best_fitnesss_mean', 'best_fitness_std', 'summed_fitness_mean', 'summed_fitness_std', 'cells_filled_mean', 'cells_filled_std']
+        cols = [
+            'file_name',
+            'best_fitness',
+            'best_fitnesss_mean',
+            'best_fitness_std',
+            'best_fitness_times_mean',
+            'best_fitness_times_std',
+            'summed_fitness_mean',
+            'summed_fitness_std',
+            'cells_filled_mean',
+            'cells_filled_std'
+        ]
 
-        ## Calculate aggregations
-        # Write stats per run
-        best_fitnesses = [r['best_fitness'] for r in runs]
-        # 1. Best Fitnesses
-        avg_best_fitness = sum(best_fitnesses) / len(best_fitnesses)
-        stdev_best_fitness = statistics.pstdev(best_fitnesses)
-
-        # 2. Summed Fitness
-        summed_fitness = [r['sum_fitness'] / r['cells_filled'] for r in runs]
-        avg_summed_fitness = sum(summed_fitness) / len(summed_fitness)
-        stdev_summed_fitnesses = statistics.pstdev(summed_fitness)
-
-        # 3. Cells filled
-        cells_filled = [r['cells_filled'] for r in runs]
-        avg_cells_filled = sum(cells_filled) / len(runs)
-        stdev_cells_filled = statistics.pstdev(cells_filled)
-
+        ## Calculate aggregations for runs
         aggs_dict = {
-            'file_name': f_name,
-            'best_fitnesss_mean': avg_best_fitness,
-            'best_fitness_std': stdev_best_fitness,
-            'summed_fitness_mean': avg_summed_fitness,
-            'summed_fitness_std': stdev_summed_fitnesses,
-            'cells_filled_mean': avg_cells_filled,
-            'cells_filled_std': stdev_cells_filled
-        }
-        print(aggs_dict)
+                'file_name': f_name,
+                'best_fitness': '',
+                'best_fitnesss_mean': '',
+                'best_fitness_std': '',
+                'best_fitness_times_mean': '',
+                'best_fitness_times_std': '',
+                'summed_fitness_mean': '',
+                'summed_fitness_std': '',
+                'cells_filled_mean': '',
+                'cells_filled_std': '',
+            }
+        if runs:
+            # Write stats per run
+            best_fitnesses = [r['best_fitness'] for r in runs]
+            # 1. Best Fitnesses
+            best_fitness = max(best_fitnesses)
+            avg_best_fitness = sum(best_fitnesses) / len(best_fitnesses)
+            stdev_best_fitness = statistics.pstdev(best_fitnesses)
+
+            # 2. Summed Fitness
+            summed_fitness = [r['sum_fitness'] / r['cells_filled'] for r in runs]
+            avg_summed_fitness = sum(summed_fitness) / len(summed_fitness)
+            stdev_summed_fitnesses = statistics.pstdev(summed_fitness)
+
+            # 3. Cells filled
+            cells_filled = [r['cells_filled'] for r in runs]
+            avg_cells_filled = sum(cells_filled) / len(runs)
+            stdev_cells_filled = statistics.pstdev(cells_filled)
+
+            aggs_dict['best_fitness'] = best_fitness
+            aggs_dict['best_fitnesss_mean'] = avg_best_fitness
+            aggs_dict['best_fitness_std'] = stdev_best_fitness
+            aggs_dict['summed_fitness_mean'] = avg_summed_fitness
+            aggs_dict['summed_fitness_std'] = stdev_summed_fitnesses
+            aggs_dict['cells_filled_mean'] = avg_cells_filled
+            aggs_dict['cells_filled_std'] = stdev_cells_filled
+
+        if results:
+            best_fitness_times = [int(r['experiment_time']) for r in results]
+            avg_best_fitness_time = sum(best_fitness_times) / len(best_fitness_times)
+            stdev_best_fitness_times = statistics.pstdev(best_fitness_times)
+
+            aggs_dict['best_fitness_times_mean'] = avg_best_fitness_time
+            aggs_dict['best_fitness_times_std'] = stdev_best_fitness_times
+
+        # print(aggs_dict)
         with open('{}'.format(aggs_file), 'a', newline='\n') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=cols)
             # writer.writeheader() # NOTE: only add when not appending
