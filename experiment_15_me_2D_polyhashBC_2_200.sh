@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 #SBATCH --verbose
-#SBATCH --job-name=lunE06
+#SBATCH --job-name=lunE15
 #SBATCH --output=slurm_%j.out
 #SBATCH --error=slurm_%j.err
 #SBATCH --time=24:00:00
@@ -18,19 +18,21 @@ pyenv activate lunarlander
 
 # Where results are going to be written
 OUTDIR=/scratch/od356/lunarlander_experiments_03
-CHECKPOINT_FREQ=1000
+CHECKPOINT_FREQ=100
+
+#NUM_INDIVIDUALS=1000 #test run
+NUM_INDIVIDUALS=100000 #real experiment
 
 for n in {1..20}
 do
     python lunarlandercolab.py \
-           --run-id=e06_$n \
+           --run-id=e15_$n \
            --search-type=ME \
-           --mode='ME-endpointBC' \
+           --mode='ME-polyhashBC' \
            --init-population-size=1000 \
-           --sizer-range 200 200 \
-           --num-individuals=100000 \
+           --num-individuals=$NUM_INDIVIDUALS \
            --checkpoint-dir=$OUTDIR \
-           --checkpoint-prefix=experiment06_$n \
+           --checkpoint-prefix=experiment15_$n \
            --checkpoint-enabled \
            --checkpoint-frequency=$CHECKPOINT_FREQ \
            --seed=1008

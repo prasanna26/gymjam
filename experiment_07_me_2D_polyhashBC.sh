@@ -27,6 +27,7 @@ do
            --search-type=ME \
            --mode='ME-polyhashBC' \
            --init-population-size=1000 \
+           --sizer-range 200 200 \
            --num-individuals=100000 \
            --checkpoint-dir=$OUTDIR \
            --checkpoint-prefix=experiment07_$n \

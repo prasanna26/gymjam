@@ -26,6 +26,7 @@ do
            --run-id=e08_$n \
            --search-type=ME \
            --mode='ME-fitnessBC' \
+           --sizer-range 200 200 \
            --init-population-size=1000 \
            --num-individuals=100000 \
            --checkpoint-dir=$OUTDIR \

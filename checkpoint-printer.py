@@ -1,6 +1,7 @@
 import argparse
 import sys
 from lunarlandercolab import FixedFeatureMap, Agent, GameEvaluator, LinearSizer, EmptyBuffer
+from gymjam.mapping.buffers import SlidingBuffer
 from checkpointing import Checkpoint
 import csv
 import statistics
@@ -76,17 +77,19 @@ if args.result_files:
         try:
             fp = open(f)
             line = fp.readline()
-            parts = re.split('\s+', line)
+            while line:
+                parts = re.split('\s+', line)
 
-            if len(parts) >= 2:
-                experiment_time = parts[0]
-                experiment_fitness = parts[1]
-                result = {
-                    'file_name': f,
-                    'experiment_time': experiment_time,
-                    'experiment_fitness': experiment_fitness
-                }
-                results.append(result)
+                if len(parts) >= 2:
+                    experiment_time = parts[0]
+                    experiment_fitness = parts[1]
+                    result = {
+                        'file_name': f,
+                        'experiment_time': experiment_time,
+                        'experiment_fitness': experiment_fitness
+                    }
+                    results.append(result)
+                line = fp.readline()
             else:
                 print("WARNING: file '{}' has no parsable output on line 1 '{}'".format(f, line))
             # do stuff with fp

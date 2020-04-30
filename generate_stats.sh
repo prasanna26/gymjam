@@ -5,6 +5,8 @@ CHECKPOINTS_DIR=../gymjam_results/2020_04_28_experiments/checkpoints
 PREV_RUN_CHECKPOINTS_DIR=../gymjam_results/2020_04_22_experiments/checkpoints
 RESULTS_DIR=../gymjam_results/2020_04_28_experiments/results
 
+# Lisa runs files
+CHECKPOINTS_DIR_LISA=../gymjam_results/lisa_results/mortality
 
 # Create aggregations file
 AGGS_FILE=aggregations.csv
@@ -23,11 +25,21 @@ python checkpoint-printer.py \
     --outFile="exp02_stats" \
     --aggregations=$AGGS_FILE
 
+# Experiment 2.1 - Slurm File -- results file unavailable, parsing logs
+python parse-slurm-files.py \
+    --files ../gymjam_results/2020_04_22_experiments/logfiles/*_e02*.out \
+    --outFile=exp02_stats
+
 # Experiment 3
 python checkpoint-printer.py \
     --files $PREV_RUN_CHECKPOINTS_DIR/experiment03_*_latest.pkl \
     --outFile="exp03_stats" \
     --aggregations=$AGGS_FILE
+
+# Experiment 3.1 - Slurm File -- results file unavailable, parsing logs
+python parse-slurm-files.py \
+    --files ../gymjam_results/2020_04_22_experiments/logfiles/*_e03*.out \
+    --outFile=exp03_stats
 
 # Experiment 4
 python checkpoint-printer.py \
@@ -69,4 +81,44 @@ python checkpoint-printer.py \
     --files $CHECKPOINTS_DIR/experiment09_*_latest.pkl \
     --result-files $RESULTS_DIR/results_e09* \
     --outFile="exp09_stats" \
+    --aggregations=$AGGS_FILE
+
+# Experiment 10
+python checkpoint-printer.py \
+    --files $CHECKPOINTS_DIR_LISA/endpoint/checkpoints/experiment06_*_latest.pkl \
+    --result-files $CHECKPOINTS_DIR_LISA/endpoint/results0.txt \
+    --outFile="exp10_stats" \
+    --aggregations=$AGGS_FILE
+
+## Experiment 11
+#
+## TBD
+#
+
+# Experiment 12
+python checkpoint-printer.py \
+    --files $CHECKPOINTS_DIR_LISA/fitness/checkpoints/experiment08_*_latest.pkl \
+    --result-files $CHECKPOINTS_DIR_LISA/fitness/results0.txt \
+    --outFile="exp12_stats" \
+    --aggregations=$AGGS_FILE
+
+# Experiment 13
+python checkpoint-printer.py \
+    --files $CHECKPOINTS_DIR_LISA/entropy/checkpoints/experiment09_*_latest.pkl \
+    --result-files $CHECKPOINTS_DIR_LISA/entropy/results0.txt \
+    --outFile="exp13_stats" \
+    --aggregations=$AGGS_FILE
+
+# Experiment 14
+python checkpoint-printer.py \
+    --files $CHECKPOINTS_DIR/experiment14_*_latest.pkl \
+    --result-files $RESULTS_DIR/results_e14* \
+    --outFile="exp14_stats" \
+    --aggregations=$AGGS_FILE
+
+# Experiment 15
+python checkpoint-printer.py \
+    --files $CHECKPOINTS_DIR/experiment09_*_latest.pkl \
+    --result-files $RESULTS_DIR/results_e15* \
+    --outFile="exp15_stats" \
     --aggregations=$AGGS_FILE
