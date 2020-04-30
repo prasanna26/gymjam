@@ -7,6 +7,7 @@ RESULTS_DIR=../gymjam_results/2020_04_28_experiments/results
 
 # Lisa runs files
 CHECKPOINTS_DIR_LISA=../gymjam_results/lisa_results/mortality
+CHECKPOINTS_DIR_LISA2=../gymjam_results/lisa_results/scaling
 
 # Create aggregations file
 AGGS_FILE=aggregations.csv
@@ -91,12 +92,12 @@ echo "file_name,best_fitness,best_fitnesss_mean,best_fitness_std,best_fitness_ti
 #    --aggregations=$AGGS_FILE
 
 ## Experiment 11
-python checkpoint-printer.py \
-    --files $CHECKPOINTS_DIR_LISA/polyhash/checkpoints/experiment07_*_latest.pkl \
-    --result-files $CHECKPOINTS_DIR_LISA/polyhash/results0.txt \
-    --outFile="exp11_stats" \
-    --aggregations=$AGGS_FILE
-#
+#python checkpoint-printer.py \
+#    --files $CHECKPOINTS_DIR_LISA/polyhash/checkpoints/experiment07_*_latest.pkl \
+#    --result-files $CHECKPOINTS_DIR_LISA/polyhash/results0.txt \
+#    --outFile="exp11_stats" \
+#    --aggregations=$AGGS_FILE
+##
 ## Experiment 12
 #python checkpoint-printer.py \
 #    --files $CHECKPOINTS_DIR_LISA/fitness/checkpoints/experiment08_*_latest.pkl \
@@ -124,3 +125,17 @@ python checkpoint-printer.py \
 #    --result-files $RESULTS_DIR/results_e15* \
 #    --outFile="exp15_stats" \
 #    --aggregations=$AGGS_FILE
+
+# Experiment 16
+python checkpoint-printer.py \
+    --files $CHECKPOINTS_DIR_LISA2/fitness/checkpoints/experiment08_*_latest.pkl \
+    --result-files $CHECKPOINTS_DIR_LISA2/fitness/results0.txt \
+    --outFile="exp16_stats" \
+    --aggregations=$AGGS_FILE
+
+# Experiment 17
+python checkpoint-printer.py \
+    --files $CHECKPOINTS_DIR_LISA2/entropy/checkpoints/experiment09_*_latest.pkl \
+    --result-files $CHECKPOINTS_DIR_LISA2/entropy/results0.txt \
+    --outFile="exp17_stats" \
+    --aggregations=$AGGS_FILE
